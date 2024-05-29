@@ -1,0 +1,524 @@
+> sessionInfo() 
+R version 4.3.2 (2023-10-31 ucrt) 
+Platform: x86_64-w64-mingw32/x64 (64-bit) 
+Running under: Windows 11 x64 (build 22631) 
+ 
+Matrix products: default 
+ 
+ 
+locale: 
+[1] LC_COLLATE=English_United States.utf8  LC_CTYPE=English_United States.utf8    
+[3] LC_MONETARY=English_United States.utf8 LC_NUMERIC=C                           
+[5] LC_TIME=English_United States.utf8     
+ 
+time zone: Asia/Shanghai 
+tzcode source: internal 
+ 
+attached base packages: 
+[1] stats     graphics  grDevices utils     datasets  methods   base      
+ 
+loaded via a namespace (and not attached): 
+[1] compiler_4.3.2 tools_4.3.2  
+## 
+rm(list = ls()) 
+options(stringsAsFactors = F) 
+getOption('timeout') 
+options(timeout=10000) 
+options(set.seed=1234) 
+library(data.table) 
+library(clusterProfiler) 
+library(org.Hs.eg.db) 
+library(DESeq2) 
+library(readxl) 
+library(tidyverse) 
+library(dplyr) 
+library(tinyarray) 
+library(GEOquery) 
+library(GEOmirror) 
+library(idmap2)  
+library(stringr) 
+library(limma) 
+library(TCGAplot) 
+library(ggpubr) 
+library(ggsci) 
+library(ggpubr) 
+library(ggsci) 
+library(TCGAbiolinks) 
+library(ggplot2) 
+library(ggpubr) 
+library(ggExtra) 
+library(cols4all) 
+library(enrichplot) 
+library(ggplot2) 
+library(GOplot) 
+## 
+ 
+#figure_1 
+gene="DXS253E" 
+cancer=c("COAD","READ") 
+#DXS253E pan-cancer expression boxplot  
+p1<-pan_boxplot(gene,palette = "npg",legend = "right",method="wilcox.test") 
+# 
+ggsave(filename = "pancancer_exp_boxplot.pdf",plot = p1,units = "cm",height = 12,width = 24) 
+#figure_1 
+p2<-pan_paired_boxplot(gene,legend = "none",palette = "npg",method = "wilcox.test") 
+# 
+ggsave(filename = "pancancer_exp_paired.pdf",plot = p2,units = "cm",height = 12,width = 24) 
+### 
+##figure_1  
+##DXS253E expression in COAD & READ 
+p3<-tcga_boxplot(cancer[1],gene,palette = "npg") 
+# 
+ggsave(filename = "COAD_exp.pdf",plot = p3,units = "cm",height = 12,width = 16) 
+#READ 
+p4<-tcga_boxplot(cancer[2],gene,palette = "npg") 
+# 
+ggsave(filename = "READ_exp.pdf",plot = p4,units = "cm",height = 12,width = 16) 
+ 
+#GSE9348 
+geo = geo_download("GSE9348", 
+                   by_annopbrobe = TRUE, 
+                   simpd = TRUE, 
+                   colon_remove = FALSE, 
+                   destdir = getwd())   
+ 
+str(geo,max.level = 1) 
+ 
+ 
+ 
+##Extract expression matrix 
+exp=geo$exp 
+range(exp)   
+exp_norm<-normalizeBetweenArrays(exp) 
+exp_norm = log2(exp_norm+1) 
+boxplot(exp_norm) 
+phe<-geo$pd 
+phe$description<-sort(phe$description) 
+Group = str_remove_all(geo$pd$title,"\\d") 
+table(Group) 
+Group<-c(rep("N",12),rep("T",70)) 
+ 
+ 
+exp1 = exp_norm[,rownames(phe)] 
+Group1 = factor(Group,levels = c("N", "T")) 
+ 
+id<-idmap2::get_soft_IDs("GPL570") 
+id=id[match(rownames(exp1),id$ID),] 
+ 
+ 
+transform <- function(exp1,id){ 
+  tmp = by(exp1, 
+           id$symbol, 
+           function(x) rownames(x)[which.max(rowMeans(x))] ) 
+  probes = as.character(tmp) 
+  print(dim(exp1)) 
+  exp1=exp1[rownames(exp1) %in% probes ,] 
+   
+  print(dim(exp1)) 
+  rownames(exp1)=id[match(rownames(exp1),id$ID),2] 
+  return(exp1) 
+} 
+exprSet <- transform(exp1,id) 
+ 
+ 
+ 
+exprSet2<-as.data.frame(t(exprSet)) 
+exprSet2$group<-Group 
+ 
+DXS253E_exp<-exprSet2[,c("DXS253E","group")] 
+names(DXS253E_exp) 
+ 
+ 
+p<-ggplot(DXS253E_exp, aes(x=group, y=DXS253E,fill=group)) +  
+  geom_boxplot()+ 
+  scale_fill_brewer(palette="Set1")+ 
+  theme_classic()+ stat_compare_means(method = "t.test", 
+label = "p.signif", 
+label.x = 1.2,  
+label.y = 10) 
+p 
+ 
+ 
+ 
+#GSE23878 
+geo = geo_download("GSE23878", 
+                   by_annopbrobe = TRUE, 
+                   simpd = TRUE, 
+                   colon_remove = FALSE, 
+                   destdir = getwd())   
+ 
+str(geo,max.level = 1) 
+ 
+ 
+ 
+##Extract expression matrix 
+exp=geo$exp 
+range(exp)   
+exp_norm<-normalizeBetweenArrays(exp) 
+# exp_norm = log2(exp_norm+1) 
+boxplot(exp_norm) 
+phe<-geo$pd 
+phe$description<-sort(phe$description) 
+Group = str_remove_all(geo$pd$title,"\\d") 
+table(Group) 
+Group<-c(rep("T",35),rep("N",24)) 
+ 
+ 
+exp1 = exp_norm[,rownames(phe)] 
+Group1 = factor(Group,levels = c("T", "N")) 
+ 
+id<-idmap2::get_soft_IDs("GPL570") 
+id=id[match(rownames(exp1),id$ID),] 
+ 
+ 
+transform <- function(exp1,id){ 
+  tmp = by(exp1, 
+           id$symbol, 
+           function(x) rownames(x)[which.max(rowMeans(x))] ) 
+  probes = as.character(tmp) 
+  print(dim(exp1)) 
+  exp1=exp1[rownames(exp1) %in% probes ,] 
+   
+  print(dim(exp1)) 
+  rownames(exp1)=id[match(rownames(exp1),id$ID),2] 
+  return(exp1) 
+} 
+exprSet <- transform(exp1,id) 
+ 
+ 
+ 
+exprSet2<-as.data.frame(t(exprSet)) 
+exprSet2$group<-Group 
+ 
+DXS253E_exp<-exprSet2[,c("DXS253E","group")] 
+names(DXS253E_exp) 
+ 
+p<-ggplot(DXS253E_exp, aes(x=group, y=DXS253E,fill=group)) +  
+  geom_boxplot()+ 
+  scale_fill_brewer(palette="Set1")+ 
+  theme_classic()+ stat_compare_means(method = "t.test", 
+                                      label = "p.signif", 
+                                      label.x = 1.2,  
+                                      label.y = 10) 
+p 
+ 
+##DXS253E Survival analysis in COAD 
+COAD_tpm<-get_tpm("COAD") 
+class(COAD_tpm) 
+ 
+COAD_clinical<-get_meta(cancer[1]) 
+COAD_tpm$barcode<-rownames(COAD_tpm) 
+ 
+COAD_tpm$barcode<-str_sub(COAD_tpm$barcode,1,12) 
+ 
+table(duplicated(rownames(COAD_tpm))) 
+ 
+dat <- data.frame(barcode=COAD_tpm$barcode,DXS253E =COAD_tpm$DXS253E) 
+COAD_clinical$barcode<-rownames(COAD_clinical) 
+ 
+dat2 <- merge( dat, COAD_clinical, by = "barcode") 
+#table(fin_dat$gene) 
+# fitting model 
+library(survival) # 
+library(survminer)  
+dat2$level <- ifelse(dat2[,2]>median(dat2[,2]),'High','Low') 
+fit <- survfit(Surv(time,event)~level,data = dat2) 
+surv_pvalue(fit)$pval 
+ggsurvplot(fit, 
+           pval = TRUE, conf.int = TRUE, 
+           risk.table = TRUE, # Add risk table 
+           risk.table.col = "strata", # Change risk table color by groups 
+           linetype = "strata", # Change line type by groups 
+           surv.median.line = "hv", # Specify median survival 
+           ggtheme = theme_bw(), # Change ggplot2 theme 
+           palette = c("#E7B800", "#2E9FDF")) 
+ 
+ 
+ 
+ 
+ 
+# 
+clinical2<-read_xlsx('./clinical.xlsx')#download clinical data from cbioportal 
+ 
+ 
+table(clinical2$`Patient ID`%in%COAD_clinical$barcode) 
+clinical2<-clinical2[clinical2$`Patient ID`%in%COAD_clinical$barcode,] 
+names(clinical2) 
+clinical3<-clinical2[,c(2,23,24)] 
+ 
+names(clinical3) 
+colnames(clinical3)[1]<-"barcode" 
+dat3<-inner_join(dat2,clinical3,by="barcode") 
+dat3$`Disease Free (Months)` 
+dat3<-dat3[!dat3$`Disease Free Status`=="NA",] 
+dat3[1:11,1:11] 
+names(dat3) 
+#DSS 
+dat3$`Disease Free Status` <- as.numeric(sub(":.*", "", dat3$`Disease Free Status`)) 
+names(dat3)[c(10,11)]<-c("time2","status") 
+dat3$time2<-as.numeric(dat3$time2) 
+fit <- survfit(Surv(time2,status)~level,data = dat3) 
+surv_pvalue(fit)$pval 
+ggsurvplot(fit, 
+           pval = TRUE, conf.int = TRUE, 
+           risk.table = TRUE, # Add risk table 
+           risk.table.col = "strata", # Change risk table color by groups 
+           linetype = "strata", # Change line type by groups 
+           surv.median.line = "hv", # Specify median survival 
+           ggtheme = theme_bw(), # Change ggplot2 theme 
+           palette = c("#E7B800", "#2E9FDF")) 
+# 
+##DXS253E Survival analysis in READ same as COAD 
+###### 
+ 
+COAD_counts<-exp_Count 
+READ_counts<-exp_Count 
+READ_counts[1:10,1:10] 
+all_counts<-cbind(COAD_counts,READ_counts) 
+group_list<-make_tcga_group(all_counts) 
+ 
+# Assuming group_list is already created as shown 
+# and READ_counts is your expression matrix 
+ 
+# Extract the indices of the columns that are labeled as "tumor" 
+tumor_indices <- which(group_list == "tumor") 
+ 
+# Subset the READ_counts matrix to include only tumor samples 
+tumor_counts <- all_counts[, tumor_indices] 
+ 
+# Display the first 10 rows and 10 columns of the subset matrix to verify 
+print(tumor_counts[1:10, 1:10]) 
+ 
+# Find the median expression value of the gene ACTB across all samples 
+DXS253E_expression <- tumor_counts["DXS253E",] 
+median_DXS253E <- median(DXS253E_expression) 
+ 
+# Create a condition factor based on whether each sample's ACTB expression is above or below the median 
+condition <- factor(ifelse(DXS253E_expression > median_DXS253E, "high", "low"), levels = c("high", "low")) 
+ 
+# Create a coldata dataframe 
+coldata <- data.frame(row.names = colnames(tumor_counts), condition) 
+ 
+# Create a DESeqDataSet 
+dds <- DESeqDataSetFromMatrix(countData = tumor_counts, colData = coldata, design = ~ condition) 
+ 
+# Normalize the data and filter out low count genes 
+dds <- estimateSizeFactors(dds) 
+dds <- dds[rowSums(counts(dds)) > 10, ] 
+ 
+# Run DESeq differential expression analysis 
+dds <- DESeq(dds) 
+ 
+# Get results for the comparison between high and low groups 
+res_high_low <- results(dds, contrast = c("condition", "high", "low")) 
+ 
+# Print the results 
+res_high_low 
+ 
+# #COAD+READ DEGS and functional analysis according to DXS253E high and low group 
+ 
+ 
+nrDEG<-as.data.frame(res_high_low) 
+logFC_cutoff=log2(4) 
+adj.P.Val=0.05 
+nrDEG$change = as.factor( ifelse( nrDEG$padj < 0.05 & abs(nrDEG$log2FoldChange) > 
+                                    logFC_cutoff, 
+                                  ifelse( nrDEG$log2FoldChange > logFC_cutoff , 'UP', 
+                                          'DOWN' ), 'NOT' ) ) 
+table(nrDEG$change) 
+write.csv(nrDEG,"deg.csv") 
+ 
+ 
+ 
+nrDEG2<-subset(nrDEG,change!="NA") 
+ 
+# this_tile <- paste0( 'Cutoff for log2FC is ', round( logFC_cutoff, 3 ), 
+#                      ' 
+# The number of up gene is ', nrow(nrDEG2[ nrDEG2$change =='UP', ] ), 
+#                      ' 
+# The number of down gene is ', nrow(nrDEG2[ nrDEG2$change =='DOWN', ] ) ) 
+ 
+volcano = ggplot(data = nrDEG2, aes( x = log2FoldChange, y = -log10(padj), color = 
+                                       change)) + 
+  geom_point( alpha = 0.4, size = 1.75) + 
+  theme_set( theme_set( theme_bw( base_size = 15 ) ) ) + 
+  xlab( "log2 fold change" ) + ylab( "-log10 padj" ) + 
+ theme( plot.title = element_text( size 
+                                                           = 15, hjust = 0.5)) + 
+  scale_colour_manual( values = c('blue','black','red') )+ 
+  geom_vline(xintercept=c(-log2(4),log2(4)),lty=3,col="black",lwd=0.5)+ 
+  geom_hline(yintercept = -log10(0.05),lty=3,col="black",lwd=0.5) 
+print( volcano ) 
+ggsave( "volcano.pdf", width = 12,height = 8,dpi = 300,units = "cm") 
+dev.off() 
+ 
+#heatmap 
+ 
+DXS253E_expression <- tumor_tpm["DXS253E",] 
+DXS253E_expression<-as.data.frame(t(DXS253E_expression)) 
+median_DXS253E <- median(DXS253E_expression$DXS253E) 
+ 
+# Create a condition factor based on whether each sample's ACTB expression is above or below the median 
+Group <- factor(ifelse(DXS253E_expression$DXS253E > median_DXS253E, "high", "low"), levels = c("high", "low")) 
+ 
+ 
+ 
+DEG = nrDEG[order(nrDEG$log2FoldChange,decreasing = T),] 
+DEG =DEG[c(1:10,53433:53442),]  
+ 
+df = tumor_tpm[rownames(DEG),order(Group)] 
+df<-na.omit(df) 
+group_list=factor(c(rep("low",sum(Group=="low")),rep("high",sum(Group=="high"))), levels = c("low", "high")) 
+ 
+draw_heatmap(df,group_list,n_cutoff = 2, legend = T, show_rownames = T, annotation_legend = T, 
+             cluster_cols=F,cluster_rows=F) 
+ 
+## 
+up <- rownames(nrDEG2)[nrDEG2$change == "UP"] 
+down <- rownames(nrDEG2)[nrDEG2$change== "DOWN"] 
+diff <- c(up, down) 
+head(up); head(down) 
+ 
+diff_entrez <- bitr(diff, 
+                    fromType = "SYMBOL", 
+                    toType = "ENTREZID", 
+                    OrgDb = "org.Hs.eg.db") 
+head(diff_entrez)  
+ 
+ 
+ 
+ 
+ 
+KEGG_diff <- enrichKEGG(gene = diff_entrez$ENTREZID, 
+                        organism = "hsa",  
+                        pvalueCutoff = 0.05, 
+                        qvalueCutoff = 0.05, 
+                        pAdjustMethod = "BH", 
+                        minGSSize = 10, 
+                        maxGSSize = 500) 
+ 
+ 
+KEGG_diff <- setReadable(KEGG_diff, 
+                         OrgDb = org.Hs.eg.db, 
+                         keyType = "ENTREZID") 
+View(KEGG_diff@result) 
+ 
+ 
+ 
+GO_all_diff <- enrichGO(gene = diff_entrez$ENTREZID, 
+                        OrgDb = org.Hs.eg.db, 
+                        ont = "ALL", 
+                        pAdjustMethod = "BH", 
+                        pvalueCutoff = 0.05, 
+                        qvalueCutoff = 0.05, 
+                        minGSSize = 10, 
+                        maxGSSize = 500, 
+                        readable = T) 
+ 
+ 
+GO_all_result <- GO_all_diff@result 
+View(GO_all_result) 
+# 
+ 
+pFilter=0.05 
+adjPfilter=0.05 
+ 
+GO=as.data.frame(GO_all_diff) 
+GO=GO[(GO$pvalue<pFilter & GO$p.adjust<adjPfilter),] 
+names(diff_entrez) 
+names(nrDEG2) 
+nrDEG2$SYMBOL<-rownames(nrDEG2) 
+rt<-inner_join(nrDEG2,diff_entrez) 
+ 
+go=data.frame(Category = GO$ONTOLOGY,ID = GO$ID,Term = GO$Description, Genes = gsub("/", ", ", GO$geneID), adj_pval = GO$p.adjust) 
+ 
+genelist=data.frame(ID = rt$SYMBOL, logFC = rt$log2FoldChange) 
+row.names(genelist)=genelist[,1] 
+ 
+ 
+circ <- circle_dat(go, genelist) 
+termNum = 5                                      
+termNum=ifelse(nrow(go)<termNum,nrow(go),termNum) 
+geneNum = nrow(genelist)                        
+chord <- chord_dat(circ, genelist[1:geneNum,], go$Term[1:termNum]) 
+head(chord) 
+ 
+GOChord(chord,  
+        space = 0.001,            
+        gene.order = 'logFC',     
+        gene.space = 0.25,        
+        gene.size = 3,            
+        border.size = 0.1,      
+        process.label = 7,        
+        lfc.col=c('firebrick3', 'white','royalblue3'), 
+        ribbon.col=brewer.pal(length(go$Term[1:termNum]), 'Set3'), 
+) 
+ 
+ 
+#kegg_chrod same as go 
+ 
+ 
+#tcga immune filtration analysis  
+immune_score<-get_immu_ratio() 
+immune_score<-immune_score[colnames(tumor_tpm),] 
+immune_score<-cbind(immune_score,DXS253E_expression) 
+immune_score[1:20,1:23] 
+ 
+data<-immune_score 
+# Calculate the correlations and p-values 
+correlations <- apply(data[, -ncol(data)], 2, function(x) cor.test(data$DXS253E, x)$estimate) 
+p_values <- apply(data[, -ncol(data)], 2, function(x) cor.test(data$DXS253E, x)$p.value) 
+ 
+# Create the results data frame 
+results <- data.frame( 
+  Feature = names(correlations), 
+  Correlation = correlations, 
+  `P-value` = p_values 
+) 
+ 
+# Sort the results by absolute correlation value 
+results <- results %>% 
+  arrange(desc(abs(Correlation))) 
+ 
+print(results) 
+ 
+# Plot the correlations 
+ggplot(results, aes(x = reorder(Feature, Correlation), y = Correlation)) + 
+  geom_point() + 
+  coord_flip() + 
+  labs(x = "Immune Cell Infiltration", y = "Correlation with DXS253E") + 
+  ggtitle("Correlation between DXS253E and Immune Cell Infiltration") 
+ 
+names(results) 
+ 
+p4 <- ggplot(results,aes(x = Correlation,y = Feature)) + 
+  geom_col(aes(fill = P.value), width = 0.1) + 
+  geom_point(aes(size = Correlation, 
+                 color = P.value)) + 
+  scale_size_continuous(range = c(2, 7)) + 
+  scale_color_continuous_c4a_div('army_rose', mid = 0, reverse = T) + 
+  scale_fill_continuous_c4a_div('army_rose', mid = 0, reverse = T) + 
+  theme_classic() 
+p4 
+ 
+#NK CELL scatter plot 
+nk_cell<-immune_score[,c("NK cells","DXS253E")] 
+nk_cell[1:10,1:2] 
+nk_cell<-as.data.frame(t(nk_cell)) 
+x=as.numeric(nk_cell[1,]) 
+y=as.numeric(nk_cell[2,]) 
+ 
+ 
+df1=as.data.frame(cbind(x,y)) 
+corT=cor.test(x,y,method="spearman") 
+cor=corT$estimate 
+pValue=corT$p.value 
+p1=ggplot(df1, aes(x, y)) +  
+  xlab("DXS253E")+ylab("NK cells")+ 
+  geom_point()+ geom_smooth(method="lm",formula = y ~ x) + theme_bw()+ 
+  stat_cor(method = 'spearman', aes(x =x, y =y)) 
+p2=ggMarginal(p1, type = "density", xparams = list(fill = "orange"),yparams = list(fill = "blue")) 
+ 
+ 
+ 
+
